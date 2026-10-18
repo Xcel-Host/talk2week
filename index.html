@@ -288,10 +288,23 @@ body { padding-block-start: clamp(10px, 2.2vh, 40px); }
   .question { margin-top: 10px; font-size: clamp(1.15rem, 5vw, 1.4rem); }
   .eyebrow { font-size: .68rem; }
   .brandrow { font-size: .62rem; padding-bottom: 8px; margin-bottom: 10px; }
-  .btn { min-height: 3rem; }
-  .yes { min-height: 3.1rem; font-size: 1.05rem; }
+  .btn { min-height: 2.75rem; }
+  .yes { min-height: 2.9rem; font-size: 1.05rem; }
   .row { gap: 10px; }
   .arena { margin-top: 10px; }
+  /* the invitation screen fills exactly one phone screen: no scrolling, Accept, Escape and its message always in view */
+  body[data-screen="invite"] { padding-block: 10px; }
+  body[data-screen="invite"] .card { display: flex; flex-direction: column; min-height: calc(100svh - 36px); padding-bottom: 14px; }
+  body[data-screen="invite"] .screen { flex: 1; display: flex; flex-direction: column; }
+  body[data-screen="invite"] .arena { flex: 1 1 auto; min-height: 13.5rem; }
+  body[data-screen="invite"] .nudge { height: 3.5rem; }
+  body[data-screen="invite"] .speech { width: min(94%, 21rem); font-size: clamp(.72rem, 5cqw, 1.05rem); padding: .4rem .7rem; }
+  body[data-screen="invite"] .panel { width: 100%; max-width: calc(clamp(4rem, 100svh - 34.5rem, 13.5rem) * 1.4); }
+  /* shorter phones: drop the small label above the illustration instead of squashing the illustration */
+  @media (max-height: 680px) {
+    body[data-screen="invite"] .eyebrow { display: none; }
+    body[data-screen="invite"] .panel { max-width: calc(clamp(5.5rem, 100svh - 33.3rem, 13.5rem) * 1.4); }
+  }
 }
 .sub { margin-top: 6px; }
 .question { margin-top: 12px; }
@@ -550,6 +563,7 @@ body { padding-block-start: clamp(10px, 2.2vh, 40px); }
   function go(name) {
     if (teardown) { teardown(); teardown = null; }
     state.screen = name;
+    document.body.setAttribute('data-screen', name); // lets the CSS size the invitation to fit the screen
     screenEl.innerHTML = screens[name]();
     screenEl.classList.remove('enter');
     void screenEl.offsetWidth;
