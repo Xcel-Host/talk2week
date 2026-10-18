@@ -271,6 +271,20 @@ textarea.field { min-height: 9rem; resize: vertical; line-height: 1.5; margin-to
   to { transform: translate(var(--dx), var(--dy)) rotate(var(--r)) scale(1); opacity: 0; }
 }
 
+/* Fit-to-screen: keep the key part of the invitation (illustration, question, Accept, Escape) in view without scrolling.
+   Spacing only; the wording and the Escape button's arena are unchanged. */
+body { padding-block-start: clamp(10px, 2.2vh, 40px); }
+.card { padding-top: 16px; }
+@media (min-width: 560px) { .card { padding-top: 24px; } }
+.brandrow { padding-bottom: 10px; margin-bottom: 12px; }
+.panel { margin-top: 10px; margin-inline: auto; max-width: calc(clamp(9.5rem, 27svh, 15rem) * 1.4); container-type: inline-size; }
+.speech { font-size: clamp(.78rem, 5.6cqw, 1.15rem); }
+@media (min-width: 560px) { .panel { max-width: calc(clamp(9.5rem, 31svh, 16rem) * 1.4); } }
+.panel { margin-bottom: 4px; }
+.sub { margin-top: 6px; }
+.question { margin-top: 12px; }
+.arena { margin-top: 12px; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
