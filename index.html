@@ -281,6 +281,18 @@ body { padding-block-start: clamp(10px, 2.2vh, 40px); }
 .speech { font-size: clamp(.78rem, 5.6cqw, 1.15rem); }
 @media (min-width: 560px) { .panel { max-width: calc(clamp(9.5rem, 31svh, 16rem) * 1.4); } }
 .panel { margin-bottom: 4px; }
+/* phones: smaller text and buttons so the whole first view fits (the Escape arena itself is unchanged) */
+@media (max-width: 559px) {
+  h1 { font-size: clamp(1.45rem, 6.6vw, 1.9rem); line-height: 1.08; }
+  .sub { font-size: .9rem; line-height: 1.4; }
+  .question { margin-top: 10px; font-size: clamp(1.15rem, 5vw, 1.4rem); }
+  .eyebrow { font-size: .68rem; }
+  .brandrow { font-size: .62rem; padding-bottom: 8px; margin-bottom: 10px; }
+  .btn { min-height: 3rem; }
+  .yes { min-height: 3.1rem; font-size: 1.05rem; }
+  .row { gap: 10px; }
+  .arena { margin-top: 10px; }
+}
 .sub { margin-top: 6px; }
 .question { margin-top: 12px; }
 .arena { margin-top: 12px; }
@@ -302,7 +314,7 @@ body { padding-block-start: clamp(10px, 2.2vh, 40px); }
 <div class="bg" id="bg" aria-hidden="true"></div>
 <main class="page">
   <article class="card" id="card">
-    <div class="brandrow"><span>Your Daily Roasting Appointment</span><span>Form B-002</span></div>
+    <div class="brandrow"><span>Your Daily Roasting Appointment</span></div>
     <div id="screen" class="screen"></div>
   </article>
 </main>
