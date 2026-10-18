@@ -337,12 +337,20 @@ body { padding-block-start: clamp(10px, 2.2vh, 40px); }
   'use strict';
 
   /*
-   * NOTE: this page has NO backend. "Submit my fate" only switches to the local
-   * confirmation screen and fires a 'proposal:submit' DOM event. Nothing is sent,
-   * stored or emailed anywhere. The answers live in `state` (see window.invitation),
-   * so a real submit (form post, fetch, mail link...) can be wired to that event later.
-   * Until then she has to screenshot the last screen or tell the sender in person.
+   * SENDING HER ANSWERS
+   * There is no server of our own. "Submit my fate" posts her choices (time, activity, optional
+   * message) as JSON to a Formspree form, which emails them to the form owner.
+   *  - The form address below is PUBLIC by design (it is not a secret key) and holds no credentials.
+   *    The owner's email address lives only in the Formspree account, never in this file.
+   *  - The success screen is shown ONLY after Formspree answers with success. Any failure
+   *    (offline, timeout, error reply) shows a friendly message and keeps her choices so she can retry.
+   *  - While a request is in flight the button is disabled, so a double tap cannot send twice.
+   *  - No cookies, no analytics, nothing stored in the page or in the browser.
+   *  - If FORM_ENDPOINT is left empty the page falls back to local-only mode: the last screen
+   *    then says plainly that nothing was sent.
    */
+  var FORM_ENDPOINT = 'https://formspree.io/f/mbgdbprg';
+  var CAN_SEND = /^https:\/\/formspree\.io\/f\/[A-Za-z0-9]+$/.test(FORM_ENDPOINT);
 
   /* ---------- content ---------- */
   var TIMES = [
@@ -381,6 +389,10 @@ body { padding-block-start: clamp(10px, 2.2vh, 40px); }
     activityId: null,
     message: '',
     submitted: false,
+    sending: false,
+    sent: false,
+    sendError: false,
+    sendCount: 0,
     noAttempts: 0
   };
   function find(list, id) { for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i]; return null; }
@@ -397,7 +409,8 @@ body { padding-block-start: clamp(10px, 2.2vh, 40px); }
       time: t ? { id: t.id, label: timeLabel(), custom: t.id === 'flex' ? state.customTime.trim() : '' } : null,
       activity: a ? { id: a.id, label: a.title } : null,
       message: state.message.trim(),
-      submitted: state.submitted
+      submitted: state.submitted,
+      sent: state.sent
     };
   }
   window.invitation = { state: state, getResponse: getResponse };
@@ -542,17 +555,20 @@ body { padding-block-start: clamp(10px, 2.2vh, 40px); }
         '<textarea id="msg" class="field" maxlength="800" placeholder="Dear Your Honour, I&#39;d like to negotiate the terms of this arrangement… ✍️">' + esc(state.message) + '</textarea>' +
         '<p class="fine">Counteroffers, complaints, alternative plans, and unsolicited insults are all accepted. 😈</p>' +
         '<div class="summary" id="summary">' + summary('Your selections so far 📋', true) + '</div>' +
+        '<p class="fine" id="sendMsg" role="status" aria-live="polite" hidden></p>' +
         '<div class="actions"><button type="button" class="btn ghost" data-action="back">← Change my choices</button>' +
         '<button type="button" class="btn primary" data-action="submit">Submit my fate ✨</button></div>';
     },
     done: function () {
-      return '<div class="eyebrow">PROPOSED PLAN ✓</div>' +
+      return '<div class="eyebrow">' + (state.sent ? 'PLAN DELIVERED ✓' : 'PROPOSED PLAN ✓') + '</div>' +
         '<h1 tabindex="-1" data-focus>I&#39;ve officially accepted my fate. 🫡</h1>' +
-        '<p class="sub">Your proposed plan is ready. You retain the right to make fun of me. I retain the right to order coffee. The remaining negotiations will take place in person. 👀</p>' +
+        '<p class="sub">' + (state.sent ? 'Your proposed plan has been delivered.' : 'Your proposed plan is ready.') + ' You retain the right to make fun of me. I retain the right to order coffee. The remaining negotiations will take place in person. 👀</p>' +
         '<div class="summary">' + summary('Your selections 📋', false) + '</div>' +
         '<div class="stamp">Pending your review 📝</div>' +
         '<p class="signoff"><span class="hi">Pending your approval, menace.</span> See you tomorrow? 😌</p>' +
-        '<p class="fine">Nothing has been sent anywhere. This plan only exists on your screen, so screenshot it or tell me in person. 📸</p>' +
+        (state.sent
+          ? '<p class="fine">Delivered. 📬 Your plan has reached me. Now it&#39;s up to Your Honour.</p>'
+          : '<p class="fine">Nothing has been sent anywhere. This plan only exists on your screen, so screenshot it or tell me in person. 📸</p>') +
         '<div class="actions single"><button type="button" class="btn ghost" data-action="reopen">← Tweak my selections</button></div>' +
         '<p class="terms">Terms &amp; conditions: completely made up. 🤝</p>';
     }
@@ -702,6 +718,69 @@ body { padding-block-start: clamp(10px, 2.2vh, 40px); }
     };
   }
 
+  /* ---------- sending her plan ---------- */
+  var SEND_TIMEOUT_MS = 15000;
+  function paintSendState() {
+    if (state.screen !== 'review') return;
+    var btn = $('[data-action="submit"]'), msg = $('#sendMsg');
+    if (btn) {
+      btn.disabled = state.sending;
+      btn.textContent = state.sending ? 'Sending… 📨' : (state.sendError ? 'Try again ✨' : 'Submit my fate ✨');
+    }
+    screenEl.querySelectorAll('[data-action="back"],[data-action="edit-time"],[data-action="edit-activity"]').forEach(function (b) {
+      b.disabled = state.sending;
+    });
+    if (msg) {
+      var t = state.sending ? 'Sending your plan… 📨'
+        : state.sendError ? "That didn't go through. 😭 Your choices are still here, so try again, or screenshot this page and send it to me. 📸" : '';
+      msg.textContent = t;
+      msg.hidden = !t;
+    }
+  }
+  function planSent() {
+    state.sending = false; state.sendError = false; state.sent = true; state.submitted = true; state.sendCount++;
+    document.dispatchEvent(new CustomEvent('proposal:submit', { detail: getResponse() }));
+    go('done');
+    var hd = $('[data-focus]');
+    if (hd) { var hr = hd.getBoundingClientRect(); burst(hr.left + hr.width / 2, hr.top + hr.height / 2); }
+  }
+  function sendPlan() {
+    if (state.sending) return;
+    if (!CAN_SEND) { // local-only fallback: nothing is sent and the last screen says so
+      state.submitted = true; state.sent = false;
+      document.dispatchEvent(new CustomEvent('proposal:submit', { detail: getResponse() }));
+      go('done');
+      return;
+    }
+    var r = getResponse();
+    var payload = {
+      _subject: 'The Scheduling Department: she answered 📬' + (state.sendCount ? ' (update #' + (state.sendCount + 1) + ')' : ''),
+      time: r.time ? r.time.label : '',
+      activity: r.activity ? r.activity.label : '',
+      message: r.message || '(no message)',
+      update_number: state.sendCount + 1
+    };
+    state.sending = true; state.sendError = false; paintSendState();
+    var ctrl = window.AbortController ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, SEND_TIMEOUT_MS);
+    fetch(FORM_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: ctrl ? ctrl.signal : undefined,
+      credentials: 'omit',
+      referrerPolicy: 'no-referrer'
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (j) {
+        if (!res.ok || j.ok === false) throw new Error('send failed');
+      });
+    }).then(function () {
+      clearTimeout(timer); planSent();
+    }, function () {
+      clearTimeout(timer); state.sending = false; state.sendError = true; paintSendState();
+    });
+  }
+
   /* ---------- events ---------- */
   function syncNext() {
     var b = $('#next');
@@ -726,6 +805,7 @@ body { padding-block-start: clamp(10px, 2.2vh, 40px); }
       return;
     }
     var a = t.dataset.action;
+    if (state.sending) return; // a request is in flight: ignore every other click
     if (a === 'yes') {
       var r = t.getBoundingClientRect();
       burst(r.left + r.width / 2, r.top + r.height / 2);
@@ -741,16 +821,11 @@ body { padding-block-start: clamp(10px, 2.2vh, 40px); }
     } else if (a === 'edit-activity') {
       go('activity');
     } else if (a === 'reopen') {
-      state.submitted = false;
+      state.submitted = false; state.sent = false; state.sendError = false;
       go('review');
     } else if (a === 'submit') {
       if (!state.timeId || !state.activityId) return;
-      state.submitted = true;
-      // Local only: no network call happens here (see the NOTE at the top of this script).
-      document.dispatchEvent(new CustomEvent('proposal:submit', { detail: getResponse() }));
-      go('done');
-      var hd = $('[data-focus]');
-      if (hd) { var hr = hd.getBoundingClientRect(); burst(hr.left + hr.width / 2, hr.top + hr.height / 2); }
+      sendPlan();
     }
   });
   screenEl.addEventListener('input', function (e) {
